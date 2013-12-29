@@ -212,26 +212,21 @@ rule configure ( version ? : options * )
 rule configure-version-specific ( toolset : version : conditions )
 {
     toolset.push-checking-for-flags-module unchecked ;
-    # Starting with versions 7.0, the msvc compiler have the /Zc:forScope and
-    # /Zc:wchar_t options that improve C++ standard conformance, but those
-    # options are off by default. If we are sure that the msvc version is at
-    # 7.*, add those options explicitly. We can be sure either if user specified
-    # version 7.* explicitly or if we auto-detected the version ourselves.
-    if ! [ MATCH ^(6\\.) : $(version) ]
+    # every version below vc10 is unsupported
+    if [ MATCH ^(1\\.) : $(version) ]
     {
-        toolset.flags $(toolset).compile CFLAGS $(conditions) : /Zc:forScope /Zc:wchar_t ;
+        toolset.flags $(toolset).compile CFLAGS $(conditions) : /Zc:forScope /Zc:wchar_t /D_SCL_SECURE_NO_WARNINGS ;
         toolset.flags $(toolset).compile.c++ C++FLAGS $(conditions) : /wd4675 ;
 
-        # Explicitly disable the 'function is deprecated' warning. Some msvc
-        # versions have a bug, causing them to emit the deprecation warning even
-        # with /W0.
-        toolset.flags $(toolset).compile CFLAGS $(conditions)/<warnings>off : /wd4996 ;
-
-        if [ MATCH ^([78]\\.) : $(version) ]
+        if [ MATCH "(10)" : $(version) ]
         {
-            # 64-bit compatibility warning deprecated since 9.0, see
-            # http://msdn.microsoft.com/en-us/library/yt4xw8fh.aspx
-            toolset.flags $(toolset).compile CFLAGS $(conditions)/<warnings>all : /Wp64 ;
+            toolset.flags $(toolset).compile CFLAGS $(conditions)/<runtime-debugging>off : /d2Zi+ ;
+        }
+        if [ MATCH "(12)" : $(version) ]
+        {
+	        toolset.flags $(toolset).compile CFLAGS $(conditions) : /vmm /Zc:inline /Zc:rvalueCast ;
+	        toolset.flags $(toolset).compile CFLAGS $(conditions)/<debug-symbols>on/<debug-store>database : /FS ;
+            toolset.flags $(toolset).compile CFLAGS $(conditions)/<runtime-debugging>off : /Gw /Zo /Zc:strictStrings ;
         }
     }
 
@@ -413,20 +408,16 @@ actions preprocess-c-c++ bind PDB_NAME
     $(.CC) @"@($(<[1]:W).rsp:E="$(>[1]:W)" -E $(PDB_CFLAG)"$(PDB_NAME)" -Yu"$(>[3]:D=)" -Fp"$(>[2]:W)" $(CC_RSPLINE))" >"$(<[1]:W)"
 }
 
-rule compile-c-c++ ( targets + : sources * )
+rule compile-c-c++ ( targets + : sources * : properties * )
 {
     DEPENDS $(<[1]) : [ on $(<[1]) return $(PCH_HEADER) ] ;
     DEPENDS $(<[1]) : [ on $(<[1]) return $(PCH_FILE) ] ;
-    PDB_NAME on $(<) = $(<[1]:S=.pdb) ;
-    LOCATE on $(<[1]:S=.pdb) = [ on $(<[1]) return $(LOCATE) ] ;
 }
 
-rule preprocess-c-c++ ( targets + : sources * )
+rule preprocess-c-c++ ( targets + : sources * : properties * )
 {
     DEPENDS $(<[1]) : [ on $(<[1]) return $(PCH_HEADER) ] ;
     DEPENDS $(<[1]) : [ on $(<[1]) return $(PCH_FILE) ] ;
-    PDB_NAME on $(<) = $(<:S=.pdb) ;
-    LOCATE on $(<[1]:S=.pdb) = [ on $(<[1]) return $(LOCATE) ] ;
 }
 
 # Action for running the C/C++ compiler using precompiled headers. In addition
@@ -435,18 +426,18 @@ rule preprocess-c-c++ ( targets + : sources * )
 #
 # The global .escaped-double-quote variable is used to avoid messing up Emacs
 # syntax highlighting in the messy N-quoted code below.
-actions compile-c-c++-pch
+actions compile-c-c++-pch bind PDB_NAME
 {
-    $(.CC) @"@($(<[1]:W).rsp:E="$(>[2]:W)" -Fo"$(<[2]:W)" -Yc"$(>[1]:D=)" $(YLOPTION)"__bjam_pch_symbol_$(>[1]:D=)" -Fp"$(<[1]:W)" $(CC_RSPLINE))" "@($(<[1]:W).cpp:E=#include $(.escaped-double-quote)$(>[1]:D=)$(.escaped-double-quote)$(.nl))" $(.CC.FILTER)
+    $(.CC) @"@($(<[1]:W).rsp:E="$(>[2]:W)" -Fo"$(<[2]:W)" -Yc"$(>[1]:D=)" $(YLOPTION)"__bjam_pch_symbol_$(>[1]:D=)" -Fp"$(<[1]:W)" $(PDB_CFLAG)"$(PDB_NAME)" $(CC_RSPLINE))" "@($(<[1]:W).cpp:E=#include $(.escaped-double-quote)$(>[1]:D=)$(.escaped-double-quote)$(.nl))" $(.CC.FILTER)
 }
 
 
 # Action for running the C/C++ compiler using precompiled headers. An already
 # built source file for compiling the precompiled headers is expected to be
 # given as one of the source parameters.
-actions compile-c-c++-pch-s
+actions compile-c-c++-pch-s bind PDB_NAME
 {
-    $(.CC) @"@($(<[1]:W).rsp:E="$(>[2]:W)" -Fo"$(<[2]:W)" -Yc"$(>[1]:D=)" $(YLOPTION)"__bjam_pch_symbol_$(>[1]:D=)" -Fp"$(<[1]:W)" $(CC_RSPLINE))" $(.CC.FILTER)
+    $(.CC) @"@($(<[1]:W).rsp:E="$(>[2]:W)" -Fo"$(<[2]:W)" -Yc"$(>[1]:D=)" $(YLOPTION)"__bjam_pch_symbol_$(>[1]:D=)" -Fp"$(<[1]:W)" $(PDB_CFLAG)"$(PDB_NAME)" $(CC_RSPLINE))" $(.CC.FILTER)
 }
 
 
@@ -504,6 +495,10 @@ actions compile.rc
 
 rule link ( targets + : sources * : properties * )
 {
+    PDB_NAME on $(<[1]) = $(<[1]:S=.pdb) ;
+    LOCATE on $(<[1]:S=.pdb) = [ on $(<[1]) return $(LOCATE) ] ;
+    PDB_NAME on $(>) = $(<[1]:S=.pdb) ;
+    LOCATE on $(<[1]:S=.pdb) = [ on $(<[1]) return $(LOCATE) ] ;
     if <embed-manifest>on in $(properties)
     {
         if [ feature.get-values <embed-manifest-file> : $(properties) ]
@@ -513,13 +508,17 @@ rule link ( targets + : sources * : properties * )
         }
         else 
         {
-            msvc.manifest $(targets) : $(sources) : $(properties) ;
-        }
+        msvc.manifest $(targets) : $(sources) : $(properties) ;
+    }
     }
 }
 
 rule link.dll ( targets + : sources * : properties * )
 {
+    PDB_NAME on $(<[1]) = $(<[1]:S=.pdb) ;
+    LOCATE on $(<[1]:S=.pdb) = [ on $(<[1]) return $(LOCATE) ] ;
+    PDB_NAME on $(>) = $(<[1]:S=.intermediate-pdb) ;
+    LOCATE on $(<[1]:S=.intermediate-pdb) = [ on $(<[1]) return $(LOCATE) ] ;
     DEPENDS $(<) : [ on $(<) return $(DEF_FILE) ] ;
     if <embed-manifest>on in $(properties)
     {
@@ -530,8 +529,8 @@ rule link.dll ( targets + : sources * : properties * )
         }
         else 
         {
-            msvc.manifest.dll $(targets) : $(sources) : $(properties) ;
-        }
+        msvc.manifest.dll $(targets) : $(sources) : $(properties) ;
+    }
     }
 }
 
@@ -547,9 +546,9 @@ rule link.dll ( targets + : sources * : properties * )
 
 if [ os.name ] in NT
 {
-    actions link bind DEF_FILE LIBRARIES_MENTIONED_BY_FILE
+    actions link bind DEF_FILE LIBRARIES_MENTIONED_BY_FILE PDB_NAME
     {
-        $(.LD) $(LINKFLAGS) /out:"$(<[1]:W)" /LIBPATH:"$(LINKPATH:W)" $(OPTIONS) @"@($(<[1]:W).rsp:E=$(.nl)"$(>)" $(.nl)$(LIBRARIES_MENTIONED_BY_FILE) $(.nl)$(LIBRARIES) $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_ST).lib" $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_SA).lib")"
+        $(.LD) $(LINKFLAGS) /out:"$(<[1]:W)" /LIBPATH:"$(LINKPATH:W)" $(OPTIONS) $(PDB_LINKFLAG)"$(PDB_NAME)" /PDBALTPATH:"$(PDB_NAME:B).pdb" @"@($(<[1]:W).rsp:E=$(.nl)"$(>)" $(.nl)$(LIBRARIES_MENTIONED_BY_FILE) $(.nl)$(LIBRARIES) $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_ST).lib" $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_SA).lib")"
         if %ERRORLEVEL% NEQ 0 EXIT %ERRORLEVEL%
     }
 
@@ -565,10 +564,11 @@ if [ os.name ] in NT
         $(.MT) -manifest "$(EMBED_MANIFEST_FILE)" "-outputresource:$(<[1]);1"
     }
 
-    actions link.dll bind DEF_FILE LIBRARIES_MENTIONED_BY_FILE
+    actions link.dll bind DEF_FILE LIBRARIES_MENTIONED_BY_FILE PDB_NAME
     {
-        $(.LD) /DLL $(LINKFLAGS) /out:"$(<[1]:W)" /IMPLIB:"$(<[2]:W)" /LIBPATH:"$(LINKPATH:W)" /def:"$(DEF_FILE)" $(OPTIONS) @"@($(<[1]:W).rsp:E=$(.nl)"$(>)" $(.nl)$(LIBRARIES_MENTIONED_BY_FILE) $(.nl)$(LIBRARIES) $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_ST).lib" $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_SA).lib")"
+        $(.LD) /DLL $(LINKFLAGS) /out:"$(<[1]:W)" /IMPLIB:"$(<[2]:W)" /LIBPATH:"$(LINKPATH:W)" /def:"$(DEF_FILE)" $(OPTIONS) $(PDB_LINKFLAG)"$(PDB_NAME)" /PDBALTPATH:"$(PDB_NAME:B).pdb" @"@($(<[1]:W).rsp:E=$(.nl)"$(>)" $(.nl)$(LIBRARIES_MENTIONED_BY_FILE) $(.nl)$(LIBRARIES) $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_ST).lib" $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_SA).lib")"
         if %ERRORLEVEL% NEQ 0 EXIT %ERRORLEVEL%
+        if exist "$(PDB_NAME:S=.intermediate-pdb)" DEL "$(PDB_NAME:S=.intermediate-pdb)"
     }
 
     actions manifest.dll
@@ -584,9 +584,9 @@ if [ os.name ] in NT
 }
 else
 {
-    actions link bind DEF_FILE LIBRARIES_MENTIONED_BY_FILE
+    actions link bind DEF_FILE LIBRARIES_MENTIONED_BY_FILE PDB_NAME
     {
-        $(.LD) $(LINKFLAGS) /out:"$(<[1]:W)" /LIBPATH:"$(LINKPATH:W)" $(OPTIONS) @"@($(<[1]:W).rsp:E=$(.nl)"$(>)" $(.nl)$(LIBRARIES_MENTIONED_BY_FILE) $(.nl)$(LIBRARIES) $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_ST).lib" $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_SA).lib")"
+        $(.LD) $(LINKFLAGS) /out:"$(<[1]:W)" /LIBPATH:"$(LINKPATH:W)" $(OPTIONS) $(PDB_LINKFLAG)"$(PDB_NAME)" /PDBALTPATH:"$(PDB_NAME:B).pdb" @"@($(<[1]:W).rsp:E=$(.nl)"$(>)" $(.nl)$(LIBRARIES_MENTIONED_BY_FILE) $(.nl)$(LIBRARIES) $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_ST).lib" $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_SA).lib")"
     }
 
     actions manifest
@@ -596,9 +596,10 @@ else
         fi
     }
 
-    actions link.dll bind DEF_FILE LIBRARIES_MENTIONED_BY_FILE
+    actions link.dll bind DEF_FILE LIBRARIES_MENTIONED_BY_FILE PDB_NAME
     {
-        $(.LD) /DLL $(LINKFLAGS) /out:"$(<[1]:W)" /IMPLIB:"$(<[2]:W)" /LIBPATH:"$(LINKPATH:W)" /def:"$(DEF_FILE)" $(OPTIONS) @"@($(<[1]:W).rsp:E=$(.nl)"$(>)" $(.nl)$(LIBRARIES_MENTIONED_BY_FILE) $(.nl)$(LIBRARIES) $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_ST).lib" $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_SA).lib")"
+        $(.LD) /DLL $(LINKFLAGS) /out:"$(<[1]:W)" /IMPLIB:"$(<[2]:W)" /LIBPATH:"$(LINKPATH:W)" /def:"$(DEF_FILE)" $(OPTIONS) $(PDB_LINKFLAG)"$(PDB_NAME)" /PDBALTPATH:"$(PDB_NAME:B).pdb" @"@($(<[1]:W).rsp:E=$(.nl)"$(>)" $(.nl)$(LIBRARIES_MENTIONED_BY_FILE) $(.nl)$(LIBRARIES) $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_ST).lib" $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_SA).lib")"
+        $(.RM) "$(PDB_NAME:S=.intermediate-pdb)"
     }
 
     actions manifest.dll
@@ -681,7 +682,7 @@ class msvc-pch-generator : pch-generator
         {
             if [ type.is-derived [ $(g).type ] PCH ]
             {
-                pch-file = $(g) ;
+                pch-file = $(PDB_NAME:B)$(g) ;
             }
         }
 
@@ -1405,7 +1406,7 @@ local rule register-toolset-really ( )
 
     toolset.flags msvc.compile CFLAGS <debug-symbols>on/<debug-store>object : /Z7 ;
     toolset.flags msvc.compile CFLAGS <debug-symbols>on/<debug-store>database : /Zi ;
-    toolset.flags msvc.compile CFLAGS <optimization>off : /Od ;
+    toolset.flags msvc.compile CFLAGS <optimization>off : /Od /Ob1 ;
     toolset.flags msvc.compile CFLAGS <inlining>off : /Ob0 ;
     toolset.flags msvc.compile CFLAGS <inlining>on : /Ob1 ;
     toolset.flags msvc.compile CFLAGS <inlining>full : /Ob2 ;
@@ -1431,6 +1432,7 @@ local rule register-toolset-really ( )
     toolset.flags msvc.compile CFLAGS <runtime-debugging>off/<runtime-link>static/<threading>multi : /MT ;
     toolset.flags msvc.compile CFLAGS <runtime-debugging>on/<runtime-link>static/<threading>multi : /MTd ;
 
+    toolset.flags msvc.compile CFLAGS <runtime-debugging>off : /D_SECURE_SCL=0 /GL /Gy ;
     toolset.flags msvc.compile OPTIONS <cflags> : ;
     toolset.flags msvc.compile.c++ OPTIONS <cxxflags> : ;
 
@@ -1454,13 +1456,14 @@ local rule register-toolset-really ( )
 
     # Declare flags for linking.
     {
-        toolset.flags msvc.link PDB_LINKFLAG <debug-symbols>on/<debug-store>database : /PDB: ;  # not used yet
+        toolset.flags msvc.link PDB_LINKFLAG <debug-symbols>on/<debug-store>database : /PDB: ;
         toolset.flags msvc.link LINKFLAGS <debug-symbols>on : /DEBUG ;
         toolset.flags msvc.link DEF_FILE <def-file> ;
 
         # The linker disables the default optimizations when using /DEBUG so we
         # have to enable them manually for release builds with debug symbols.
-        toolset.flags msvc LINKFLAGS <debug-symbols>on/<runtime-debugging>off : /OPT:REF,ICF ;
+        toolset.flags msvc LINKFLAGS <runtime-debugging>off : /OPT:REF,ICF ;
+        toolset.flags msvc LINKFLAGS <runtime-debugging>off : /LTCG /INCREMENTAL:NO ;
 
         toolset.flags msvc LINKFLAGS <user-interface>console : /subsystem:console ;
         toolset.flags msvc LINKFLAGS <user-interface>gui : /subsystem:windows ;
@@ -1479,6 +1482,8 @@ local rule register-toolset-really ( )
         toolset.flags msvc.link.dll LINKFLAGS <suppress-import-lib>true : /NOENTRY ;
     }
 
+    toolset.flags msvc ARCHIVEFLAGS <debug-symbols>off : /LTCG ;
+    toolset.flags msvc ARCHIVEFLAGS <runtime-debugging>off : /LTCG ;
     toolset.flags msvc.archive AROPTIONS <archiveflags> ;
 }
 
