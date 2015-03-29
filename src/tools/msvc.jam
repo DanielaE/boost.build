@@ -212,23 +212,33 @@ rule configure ( version ? : options * )
 rule configure-version-specific ( toolset : version : conditions )
 {
     toolset.push-checking-for-flags-module unchecked ;
+	
+    local min-10.0 = [ MATCH ^([1-9][0-9]\\.) : $(version) ] ;
+    local upto-11.0 = [ MATCH ^(1[01]\\.) : $(version) ] ;
+    local min-12.0 = [ MATCH ^(1[24]\\.) : $(version) ] ;
+	
     # every version below vc10 is unsupported
-    if [ MATCH ^(1\\.) : $(version) ]
+    if $(min-10.0)
     {
-        toolset.flags $(toolset).compile CFLAGS $(conditions) : /Zc:forScope /Zc:wchar_t /D_SCL_SECURE_NO_WARNINGS ;
-        toolset.flags $(toolset).compile.c++ C++FLAGS $(conditions) : /wd4675 ;
+        toolset.flags $(toolset).compile CFLAGS $(conditions) : /Zc:forScope /Zc:wchar_t /D_SCL_SECURE_NO_WARNINGS /GF /bigobj ;
+        toolset.flags $(toolset).compile.c++ C++FLAGS $(conditions) : /wd4675 /wd4005 /wd4714 /wd4503 /wd4206 /wd4530 ;
 
-        if [ MATCH "(10)" : $(version) ]
+        if $(upto-11.0)
         {
             toolset.flags $(toolset).compile CFLAGS $(conditions)/<runtime-debugging>off : /d2Zi+ ;
         }
-        if [ MATCH "(12)" : $(version) ]
+        if $(min-12.0)
         {
 	        toolset.flags $(toolset).compile CFLAGS $(conditions) : /vmm /Zc:inline /Zc:rvalueCast ;
 	        toolset.flags $(toolset).compile CFLAGS $(conditions)/<debug-symbols>on/<debug-store>database : /FS ;
             toolset.flags $(toolset).compile CFLAGS $(conditions)/<runtime-debugging>off : /Gw /Zo /Zc:strictStrings ;
         }
     }
+	else
+	{
+        import errors ;
+        errors.error "MSVC toolset configuration: Toolset version '$(version)'." ;
+	}
 
     #
     # Processor-specific optimization.
@@ -258,7 +268,7 @@ rule configure-version-specific ( toolset : version : conditions )
     else
     {
         # 8.0 and above adds some more options.
-        toolset.flags $(toolset).compile CFLAGS $(conditions)/$(.cpu-arch-amd64)/<instruction-set> : /favor:blend ;
+        toolset.flags $(toolset).compile CFLAGS $(conditions)/$(.cpu-arch-amd64)/<instruction-set> : /favor:INTEL64 ;
         toolset.flags $(toolset).compile CFLAGS $(conditions)/$(.cpu-arch-amd64)/<instruction-set>$(.cpu-type-em64t) : /favor:EM64T ;
         toolset.flags $(toolset).compile CFLAGS $(conditions)/$(.cpu-arch-amd64)/<instruction-set>$(.cpu-type-amd64) : /favor:AMD64 ;
 
@@ -1045,7 +1055,7 @@ local rule configure-really ( version ? : options * )
             # http://msdn2.microsoft.com/en-us/library/x4d2c09s(vs.90).aspx
             # mention an x86_IPF option, that seems to be a documentation bug
             # and x86_ia64 is the correct option.
-            local default-global-setup-options-amd64 = x86_amd64 ;
+            local default-global-setup-options-amd64 = amd64 ;
             local default-global-setup-options-i386  = x86 ;
             local default-global-setup-options-ia64  = x86_ia64 ;
             local default-global-setup-options-arm   = x86_arm ;
@@ -1392,8 +1402,8 @@ local rule register-toolset-really ( )
 
     toolset.flags msvc.compile CFLAGS <debug-symbols>on/<debug-store>object : /Z7 ;
     toolset.flags msvc.compile CFLAGS <debug-symbols>on/<debug-store>database : /Zi ;
-    toolset.flags msvc.compile CFLAGS <optimization>off : /Od /Ob1 ;
-    toolset.flags msvc.compile CFLAGS <inlining>off : /Ob0 ;
+    toolset.flags msvc.compile CFLAGS <optimization>off : /Od ;
+    toolset.flags msvc.compile CFLAGS <inlining>off : /Ob1 ;
     toolset.flags msvc.compile CFLAGS <inlining>on : /Ob1 ;
     toolset.flags msvc.compile CFLAGS <inlining>full : /Ob2 ;
 
