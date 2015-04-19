@@ -538,8 +538,8 @@ rule link.dll ( targets + : sources * : properties * )
 {
     PDB_NAME on $(<[1]) = $(<[1]:S=.pdb) ;
     LOCATE on $(<[1]:S=.pdb) = [ on $(<[1]) return $(LOCATE) ] ;
-    PDB_NAME on $(>) = $(<[1]:S=.intermediate-pdb) ;
-    LOCATE on $(<[1]:S=.intermediate-pdb) = [ on $(<[1]) return $(LOCATE) ] ;
+    PDB_NAME on $(>) = $(<[1]:S=.ipdb) ;
+    LOCATE on $(<[1]:S=.ipdb) = [ on $(<[1]) return $(LOCATE) ] ;
     DEPENDS $(<) : [ on $(<) return $(DEF_FILE) ] ;
     if <embed-manifest>on in $(properties)
     {
@@ -589,7 +589,7 @@ if [ os.name ] in NT
     {
         $(.LD) /DLL $(LINKFLAGS) /out:"$(<[1]:W)" /IMPLIB:"$(<[2]:W)" /LIBPATH:"$(LINKPATH:W)" /def:"$(DEF_FILE)" $(OPTIONS) $(PDB_LINKFLAG)"$(PDB_NAME)" /PDBALTPATH:"$(PDB_NAME:B).pdb" @"@($(<[1]:W).rsp:E=$(.nl)"$(>)" $(.nl)$(LIBRARIES_MENTIONED_BY_FILE) $(.nl)$(LIBRARIES) $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_ST).lib" $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_SA).lib")"
         if %ERRORLEVEL% NEQ 0 EXIT %ERRORLEVEL%
-        if exist "$(PDB_NAME:S=.intermediate-pdb)" DEL "$(PDB_NAME:S=.intermediate-pdb)"
+        if exist "$(PDB_NAME:S=.ipdb)" DEL "$(PDB_NAME:S=.ipdb)"
     }
 
     actions manifest.dll
@@ -620,7 +620,7 @@ else
     actions link.dll bind DEF_FILE LIBRARIES_MENTIONED_BY_FILE PDB_NAME
     {
         $(.LD) /DLL $(LINKFLAGS) /out:"$(<[1]:W)" /IMPLIB:"$(<[2]:W)" /LIBPATH:"$(LINKPATH:W)" /def:"$(DEF_FILE)" $(OPTIONS) $(PDB_LINKFLAG)"$(PDB_NAME)" /PDBALTPATH:"$(PDB_NAME:B).pdb" @"@($(<[1]:W).rsp:E=$(.nl)"$(>)" $(.nl)$(LIBRARIES_MENTIONED_BY_FILE) $(.nl)$(LIBRARIES) $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_ST).lib" $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_SA).lib")"
-        $(.RM) "$(PDB_NAME:S=.intermediate-pdb)"
+        $(.RM) "$(PDB_NAME:S=.ipdb)"
     }
 
     actions manifest.dll
