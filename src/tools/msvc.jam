@@ -216,12 +216,13 @@ rule configure-version-specific ( toolset : version : conditions )
     local min-10.0 = [ MATCH ^([1-9][0-9]\\.) : $(version) ] ;
     local upto-11.0 = [ MATCH ^(1[01]\\.) : $(version) ] ;
     local min-12.0 = [ MATCH ^(1[24]\\.) : $(version) ] ;
+    local min-14.0 = [ MATCH ^(14\\.) : $(version) ] ;
 	
     # every version below vc10 is unsupported
     if $(min-10.0)
     {
         toolset.flags $(toolset).compile CFLAGS $(conditions) : /Zc:forScope /Zc:wchar_t /D_SCL_SECURE_NO_WARNINGS /GF /bigobj ;
-        toolset.flags $(toolset).compile.c++ C++FLAGS $(conditions) : /wd4675 /wd4005 /wd4714 /wd4503 /wd4206 /wd4530 ;
+        toolset.flags $(toolset).compile.c++ C++FLAGS $(conditions) : /wd4675 /wd4005 /wd4714 /wd4503 /wd4206 /wd4530 /wd4456 /wd4459 /wd4577 ;
 
         if $(upto-11.0)
         {
@@ -232,6 +233,11 @@ rule configure-version-specific ( toolset : version : conditions )
 	        toolset.flags $(toolset).compile CFLAGS $(conditions) : /vmm /Zc:inline /Zc:rvalueCast ;
 	        toolset.flags $(toolset).compile CFLAGS $(conditions)/<debug-symbols>on/<debug-store>database : /FS ;
             toolset.flags $(toolset).compile CFLAGS $(conditions)/<runtime-debugging>off : /Gw /Zo /Zc:strictStrings ;
+            toolset.flags $(toolset).compile.asm ASMFLAGS $(conditions)/$(.cpu-arch-i386) : /safeseh ;
+        }
+        if $(min-14.0)
+        {
+	        toolset.flags $(toolset).compile CFLAGS $(conditions) : /Zc:throwingNew ;
         }
     }
 	else
@@ -1048,7 +1054,7 @@ local rule configure-really ( version ? : options * )
             # http://msdn2.microsoft.com/en-us/library/x4d2c09s(vs.90).aspx
             # mention an x86_IPF option, that seems to be a documentation bug
             # and x86_ia64 is the correct option.
-            local default-global-setup-options-amd64 = amd64 ;
+            local default-global-setup-options-amd64 = x86_amd64 ;
             local default-global-setup-options-i386  = x86 ;
             local default-global-setup-options-ia64  = x86_ia64 ;
             local default-global-setup-options-arm   = x86_arm ;
