@@ -237,7 +237,7 @@ rule configure-version-specific ( toolset : version : conditions )
         }
         if $(min-14.0)
         {
-	        toolset.flags $(toolset).compile CFLAGS $(conditions) : /Zc:throwingNew ;
+	        toolset.flags $(toolset).compile CFLAGS $(conditions) : /Zc:throwingNew /std:c++latest ;
         }
     }
 	else
