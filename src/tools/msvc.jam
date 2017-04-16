@@ -239,6 +239,10 @@ rule configure-version-specific ( toolset : version : conditions )
         {
 	        toolset.flags $(toolset).compile CFLAGS $(conditions) : /Zc:throwingNew ;
         }
+        if [ MATCH ^(14\\.1) : $(version) ]
+        {
+	        toolset.flags $(toolset).compile CFLAGS $(conditions) : /permissive- ;
+        }
     }
 	else
 	{
