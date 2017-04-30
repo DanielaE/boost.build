@@ -242,8 +242,16 @@ rule configure-version-specific ( toolset : version : conditions )
     }
 	else
 	{
-        import errors ;
-        errors.error "MSVC toolset configuration: Toolset version '$(version)'." ;
+        if [ MATCH ^(9\\.) : $(version) ]
+        {
+            toolset.flags $(toolset).compile CFLAGS $(conditions) : /Zc:forScope /Zc:wchar_t /D_BIND_TO_CURRENT_CRT_VERSION=1 ;
+            toolset.flags $(toolset).compile.c++ C++FLAGS $(conditions) : /wd4675 ;
+        }
+        else
+        {
+            import errors ;
+            errors.error "MSVC toolset configuration: Toolset version '$(version)'." ;
+        }
 	}
 
     #
