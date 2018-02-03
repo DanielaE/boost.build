@@ -222,7 +222,7 @@ rule configure-version-specific ( toolset : version : conditions )
     if $(min-10.0)
     {
         toolset.flags $(toolset).compile CFLAGS $(conditions) : /Zc:forScope /Zc:wchar_t /D_SCL_SECURE_NO_WARNINGS /GF /bigobj /wd4131 ;
-        toolset.flags $(toolset).compile.c++ C++FLAGS $(conditions) : /wd4675 /wd4005 /wd4714 /wd4503 /wd4206 /wd4530 /wd4456 /wd4459 /wd4577 /wd4512 /wd4814 ;
+        toolset.flags $(toolset).compile.c++ C++FLAGS $(conditions) : /wd4675 /wd4005 /wd4714 /wd4503 /wd4206 /wd4530 /wd4456 /wd4459 /wd4577 /wd4512 /wd4814 /wd4834 ;
 
         if $(upto-11.0)
         {
