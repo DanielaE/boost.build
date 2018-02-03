@@ -1023,6 +1023,7 @@ local rule configure-really ( version ? : options * )
 
         local below-8.0 = [ MATCH ^([67]\\.) : $(version) ] ;
         local below-11.0 = [ MATCH ^([6789]\\.|10\\.) : $(version) ] ;
+        local above-14.0 = [ MATCH ^(1[56789]\\.|14\\.1) : $(version) ] ;
 
         local cpu = i386 amd64 ia64 arm ;
         if $(below-8.0)
@@ -1118,6 +1119,11 @@ local rule configure-really ( version ? : options * )
             if [ MATCH ^(AMD64) : [ os.environ PROCESSOR_ARCHITECTURE ] ]
             {
                 default-global-setup-options-amd64 = amd64 ;
+                if $(above-14.0)
+                {
+                    default-setup-amd64 = vcvars64.bat ;
+                    default-setup-i386  = vcvarsamd64_x86.bat ;
+                }
             }
             # When Boost.Build itself is running as a 32-bit process on 64-bit
             # Windows, the above test will fail (since WOW64 simulates a 32-bit
@@ -1126,6 +1132,11 @@ local rule configure-really ( version ? : options * )
             if [ MATCH ^(AMD64) : [ os.environ PROCESSOR_ARCHITEW6432 ] ]
             {
                 default-global-setup-options-amd64 = amd64 ;
+                if $(above-14.0)
+                {
+                    default-setup-amd64 = vcvars64.bat ;
+                    default-setup-i386  = vcvarsamd64_x86.bat ;
+                }
             }
             # TODO: The same 'native compiler usage' should be implemented for
             # the Itanium platform by using the "ia64" parameter. For this
@@ -1233,11 +1244,11 @@ local rule configure-really ( version ? : options * )
                 }
                 if $(api) = desktop
                 {
-                    toolset.flags msvc.compile .CC  <windows-api>$(api)/$(cpu-conditions) : $(setup-script)$(compiler) /Zm800 -nologo ;
+                    toolset.flags msvc.compile .CC  <windows-api>$(api)/$(cpu-conditions) : $(setup-script)$(compiler) -nologo ;
                 }
                 else
                 {
-                    toolset.flags msvc.compile .CC  <windows-api>$(api)/$(cpu-conditions) : $(setup-script)$(compiler) /Zm800 /ZW /EHsc -nologo ;
+                    toolset.flags msvc.compile .CC  <windows-api>$(api)/$(cpu-conditions) : $(setup-script)$(compiler) /ZW /EHsc -nologo ;
                 }
                 toolset.flags msvc.compile .ASM <windows-api>$(api)/$(cpu-conditions) : $(setup-script)$(cpu-assembler) -nologo ;
                 toolset.flags msvc.link    .LD  <windows-api>$(api)/$(cpu-conditions) : $(setup-script)$(linker) /NOLOGO /INCREMENTAL:NO ;
@@ -1549,7 +1560,7 @@ local rule register-toolset-really ( )
     # Declare flags for the assembler.
     toolset.flags msvc.compile.asm USER_ASMFLAGS <asmflags> ;
 
-    toolset.flags msvc.compile.asm ASMFLAGS <debug-symbols>on : "/Zi /Zd" ;
+    toolset.flags msvc.compile.asm ASMFLAGS <debug-symbols>on : /Zi /Zd ;
 
     toolset.flags msvc.compile.asm ASMFLAGS <warnings>on : /W3 ;
     toolset.flags msvc.compile.asm ASMFLAGS <warnings>off : /W0 ;
