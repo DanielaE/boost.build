@@ -246,7 +246,7 @@ rule configure-version-specific ( toolset : version : conditions )
         if $(min-14.1)
         {
 	        toolset.flags $(toolset).compile CFLAGS $(conditions) : "/diagnostics:caret" ;
-	        toolset.flags $(toolset).compile CFLAGS $(conditions) : /permissive- ;
+	        toolset.flags $(toolset).compile CFLAGS $(conditions) : /permissive- "/Zc:twoPhase-" ;
         }
     }
     else
@@ -1548,7 +1548,7 @@ local rule register-toolset-really ( )
     # Declare msvc toolset specific features.
     {
         feature.feature debug-store : object database : propagated ;
-        feature.feature pch-source  :                 : dependency free ;
+    #    feature.feature pch-source  :                 : dependency free ;
     }
 
     # Declare generators.
