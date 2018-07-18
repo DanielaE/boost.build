@@ -632,18 +632,18 @@ rule preprocess-c-c++ ( targets + : sources * )
 #
 # The global .escaped-double-quote variable is used to avoid messing up Emacs
 # syntax highlighting in the messy N-quoted code below.
-actions compile-c-c++-pch
+actions compile-c-c++-pch bind PDB_NAME
 {
-    $(.SETUP) $(.CC) @"@($(<[1]:W).rsp:E="$(>[2]:W)" -Fo"$(<[2]:W)" -Yc"$(>[1]:D=)" $(YLOPTION)"__bjam_pch_symbol_$(>[1]:D=)" -Fp"$(<[1]:W)" $(CC_RSPLINE))" "@($(<[1]:W).cpp:E=#include $(.escaped-double-quote)$(>[1]:D=)$(.escaped-double-quote)$(.nl))" $(.CC.FILTER)
+    $(.SETUP) $(.CC) @"@($(<[1]:W).rsp:E="$(>[2]:W)" -Fo"$(<[2]:W)" $(PDB_CFLAG)"$(PDB_NAME)" -Yc"$(>[1]:D=)" $(YLOPTION)"__bjam_pch_symbol_$(>[1]:D=)" -Fp"$(<[1]:W)" $(CC_RSPLINE))" "@($(<[1]:W).cpp:E=#include $(.escaped-double-quote)$(>[1]:D=)$(.escaped-double-quote)$(.nl))" $(.CC.FILTER)
 }
 
 
 # Action for running the C/C++ compiler using precompiled headers. An already
 # built source file for compiling the precompiled headers is expected to be
 # given as one of the source parameters.
-actions compile-c-c++-pch-s
+actions compile-c-c++-pch-s bind PDB_NAME
 {
-    $(.SETUP) $(.CC) @"@($(<[1]:W).rsp:E="$(>[2]:W)" -Fo"$(<[2]:W)" -Yc"$(>[1]:D=)" $(YLOPTION)"__bjam_pch_symbol_$(>[1]:D=)" -Fp"$(<[1]:W)" $(CC_RSPLINE))" $(.CC.FILTER)
+    $(.SETUP) $(.CC) @"@($(<[1]:W).rsp:E="$(>[2]:W)" -Fo"$(<[2]:W)" $(PDB_CFLAG)"$(PDB_NAME)" -Yc"$(>[1]:D=)" $(YLOPTION)"__bjam_pch_symbol_$(>[1]:D=)" -Fp"$(<[1]:W)" $(CC_RSPLINE))" $(.CC.FILTER)
 }
 
 
@@ -856,6 +856,8 @@ else
 rule archive ( targets + : sources * : properties * )
 {
     set-setup-command $(targets) : $(properties) ;
+    PDB_NAME on $(<[1]) = $(<[1]:S=.pdb) ;
+    LOCATE on $(<[1]:S=.pdb) = [ on $(<[1]) return $(LOCATE) ] ;
     PDB_NAME on $(>) = $(<[1]:S=.pdb) ;
     LOCATE on $(<[1]:S=.pdb) = [ on $(<[1]) return $(LOCATE) ] ;
 }
