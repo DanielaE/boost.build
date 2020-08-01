@@ -971,6 +971,10 @@ local rule toolset-tag ( name : type ? : property-set )
         {
             version = 7 ;
         }
+        else if $(version[1]) = 14
+        {
+            version = 140 ;
+        }
     }
 
     # From GCC 5, versioning changes and minor becomes patch
