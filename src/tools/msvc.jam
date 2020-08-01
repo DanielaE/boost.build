@@ -443,6 +443,11 @@ rule configure ( version ? : options * )
 rule configure-version-specific ( toolset : version : conditions )
 {
     toolset.push-checking-for-flags-module unchecked ;
+    local min-10.0 = [ MATCH "^([1-9][0-9]\\.)" : $(version) ] ;
+    local upto-11.0 = [ MATCH "^(1[01]\\.)" : $(version) ] ;
+    local min-12.0 = [ MATCH "^(1[2-9]\\.)" : $(version) ] ;
+    local min-14.0 = [ MATCH "^(1[4-9]\\.)" : $(version) ] ;
+    local min-14.1 = [ MATCH "^(1[56789]\\.|14\\.[1-9])" : $(version) ] ;
     # Starting with versions 7.0, the msvc compiler have the /Zc:forScope and
     # /Zc:wchar_t options that improve C++ standard conformance, but those
     # options are off by default. If we are sure that the msvc version is at
@@ -450,8 +455,8 @@ rule configure-version-specific ( toolset : version : conditions )
     # version 7.* explicitly or if we auto-detected the version ourselves.
     if ! [ MATCH ^(6\\.) : $(version) ]
     {
-        toolset.flags $(toolset).compile CFLAGS $(conditions) : "/Zc:forScope" "/Zc:wchar_t" ;
-        toolset.flags $(toolset).compile.c++ C++FLAGS $(conditions) : /wd4675 ;
+        toolset.flags $(toolset).compile CFLAGS $(conditions) : "/Zc:forScope /Zc:wchar_t" /D_SCL_SECURE_NO_WARNINGS /GF /bigobj /wd4131 ;
+        toolset.flags $(toolset).compile.c++ C++FLAGS $(conditions) : /wd4675 /wd4005 /wd4714 /wd4503 /wd4206 /wd4530 /wd4456 /wd4459 /wd4577 /wd4512 /wd4814 /wd4834 ;
 
         # Explicitly disable the 'function is deprecated' warning. Some msvc
         # versions have a bug, causing them to emit the deprecation warning even
@@ -471,17 +476,29 @@ rule configure-version-specific ( toolset : version : conditions )
     # variables and functions that have internal linkage
     if ! [ version.version-less [ SPLIT_BY_CHARACTERS [ MATCH "^([0123456789.]+)" : $(version) ] : . ] : 12 ]
     {
-        toolset.flags $(toolset).compile CFLAGS $(conditions) : "/Zc:inline" ;
+        toolset.flags $(toolset).compile CFLAGS $(conditions) : /vmm "/Zc:inline /Zc:rvalueCast" ;
+        toolset.flags $(toolset).compile CFLAGS $(conditions)/<debug-symbols>on/<debug-store>database : /FS ;
+        toolset.flags $(toolset).compile.asm ASMFLAGS $(conditions)/$(.cpu-arch-i386) : /safeseh ;
 
         # /Gy analog for variables: https://devblogs.microsoft.com/cppblog/introducing-gw-compiler-switch/
-        toolset.flags $(toolset).compile CFLAGS $(conditions)/<optimization>speed $(conditions)/<optimization>space : /Gw ;
+        toolset.flags $(toolset).compile CFLAGS $(conditions)/<optimization>speed $(conditions)/<optimization>space : /Gw /Zo "/Zc:strictStrings" ;
     }
 
     # 14.0 introduced /Zc:throwingNew opt-in flag that disables a workaround
     # for not throwing operator new in VC up to 6.0
     if ! [ version.version-less [ SPLIT_BY_CHARACTERS [ MATCH "^([0123456789.]+)" : $(version) ] : . ] : 14 ]
     {
-        toolset.flags $(toolset).compile CFLAGS $(conditions) : "/Zc:throwingNew" ;
+        toolset.flags $(toolset).compile CFLAGS $(conditions) : "/Zc:throwingNew /std:c++latest" ;
+    }
+    if $(min-14.1)
+    {
+        toolset.flags $(toolset).compile CFLAGS $(conditions) : /Zf "/diagnostics:caret" /permissive- ;
+        toolset.flags $(toolset).compile CFLAGS $(conditions) : /D_ENABLE_EXTENDED_ALIGNED_STORAGE /D_ENABLE_ATOMIC_ALIGNMENT_FIX ;
+        toolset.flags $(toolset).link LINKFLAGS $(conditions)/<debug-symbols>on : "/DEBUG:FASTLINK" ;
+    }
+    else
+    {
+        toolset.flags $(toolset).link LINKFLAGS $(conditions)/<debug-symbols>on : /DEBUG ;
     }
 
     #
@@ -1308,6 +1325,7 @@ local rule configure-really ( version ? : options * )
 
         local below-8.0 = [ MATCH "^([67]\\.)" : $(version) ] ;
         local below-11.0 = [ MATCH "^([6789]\\.|10\\.)" : $(version) ] ;
+        local above-14.0 = [ MATCH "^(1[56789]\\.|14\\.[1-9])" : $(version) ] ;
 
         local cpu = i386 amd64 ia64 arm arm64 ;
         if $(below-8.0)
@@ -1406,6 +1424,11 @@ local rule configure-really ( version ? : options * )
             if [ MATCH ^(AMD64) : [ os.environ PROCESSOR_ARCHITECTURE ] ]
             {
                 default-global-setup-options-amd64 = amd64 ;
+                if $(above-14.0)
+                {
+                    default-setup-amd64 = vcvars64.bat ;
+                    default-setup-i386  = vcvarsamd64_x86.bat ;
+                }
             }
             # When B2 itself is running as a 32-bit process on 64-bit
             # Windows, the above test will fail (since WOW64 simulates a 32-bit
@@ -1414,6 +1437,11 @@ local rule configure-really ( version ? : options * )
             if [ MATCH ^(AMD64) : [ os.environ PROCESSOR_ARCHITEW6432 ] ]
             {
                 default-global-setup-options-amd64 = amd64 ;
+                if $(above-14.0)
+                {
+                    default-setup-amd64 = vcvars64.bat ;
+                    default-setup-i386  = vcvarsamd64_x86.bat ;
+                }
             }
             # TODO: The same 'native compiler usage' should be implemented for
             # the Itanium platform by using the "ia64" parameter. For this
@@ -1839,7 +1867,7 @@ local rule register-toolset-really ( )
     toolset.flags msvc.compile CFLAGS <debug-symbols>on/<debug-store>object : /Z7 ;
     toolset.flags msvc.compile CFLAGS <debug-symbols>on/<debug-store>database : /Zi ;
     toolset.flags msvc.compile CFLAGS <optimization>off : /Od ;
-    toolset.flags msvc.compile CFLAGS <inlining>off : /Ob0 ;
+    toolset.flags msvc.compile CFLAGS <inlining>off : /Ob1 ;
     toolset.flags msvc.compile CFLAGS <inlining>on : /Ob1 ;
     toolset.flags msvc.compile CFLAGS <inlining>full : /Ob2 ;
 
@@ -1870,6 +1898,7 @@ local rule register-toolset-really ( )
     toolset.flags msvc.compile CFLAGS <runtime-debugging>off/<runtime-link>static/<threading>multi : /MT ;
     toolset.flags msvc.compile CFLAGS <runtime-debugging>on/<runtime-link>static/<threading>multi : /MTd ;
 
+    toolset.flags msvc.compile CFLAGS <runtime-debugging>off : "/D_SECURE_SCL=0" /Gy ;
     toolset.flags msvc.compile OPTIONS <cflags> : ;
     toolset.flags msvc.compile.c++ OPTIONS <cxxflags> : ;
 
@@ -1901,7 +1930,7 @@ local rule register-toolset-really ( )
 
         # The linker disables the default optimizations when using /DEBUG so we
         # have to enable them manually for release builds with debug symbols.
-        toolset.flags msvc LINKFLAGS <debug-symbols>on/<runtime-debugging>off : "/OPT:REF,ICF" ;
+        toolset.flags msvc LINKFLAGS <runtime-debugging>off : "/OPT:REF,ICF" "/INCREMENTAL:NO" ;
 
         toolset.flags msvc LINKFLAGS <user-interface>console : "/subsystem:console" ;
         toolset.flags msvc LINKFLAGS <user-interface>gui : "/subsystem:windows" ;
