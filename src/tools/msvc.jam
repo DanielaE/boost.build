@@ -693,20 +693,16 @@ actions preprocess-c-c++ bind PDB_NAME
     $(.SETUP) $(.CC) @"@($(<[1]:W).rsp:E="$(>[1]:W)" -E $(PDB_CFLAG)"$(PDB_NAME)" -Yu"$(>[3]:D=)" -Fp"$(>[2]:W)" $(CC_RSPLINE))" >"$(<[1]:W)"
 }
 
-rule compile-c-c++ ( targets + : sources * )
+rule compile-c-c++ ( targets + : sources * : properties * )
 {
     DEPENDS $(<[1]) : [ on $(<[1]) return $(PCH_HEADER) ] ;
     DEPENDS $(<[1]) : [ on $(<[1]) return $(PCH_FILE) ] ;
-    PDB_NAME on $(<) = $(<[1]:S=.pdb) ;
-    LOCATE on $(<[1]:S=.pdb) = [ on $(<[1]) return $(LOCATE) ] ;
 }
 
-rule preprocess-c-c++ ( targets + : sources * )
+rule preprocess-c-c++ ( targets + : sources * : properties * )
 {
     DEPENDS $(<[1]) : [ on $(<[1]) return $(PCH_HEADER) ] ;
     DEPENDS $(<[1]) : [ on $(<[1]) return $(PCH_FILE) ] ;
-    PDB_NAME on $(<) = $(<:S=.pdb) ;
-    LOCATE on $(<[1]:S=.pdb) = [ on $(<[1]) return $(LOCATE) ] ;
 }
 
 # Action for running the C/C++ compiler using precompiled headers. In addition
@@ -802,6 +798,10 @@ toolset.uses-features msvc.link : <embed-manifest> <embed-manifest-file> ;
 rule link ( targets + : sources * : properties * )
 {
     set-setup-command $(targets) : $(properties) ;
+    PDB_NAME on $(<[1]) = $(<[1]:S=.pdb) ;
+    LOCATE on $(<[1]:S=.pdb) = [ on $(<[1]) return $(LOCATE) ] ;
+    PDB_NAME on $(>) = $(<[1]:S=.pdb) ;
+    LOCATE on $(<[1]:S=.pdb) = [ on $(<[1]) return $(LOCATE) ] ;
     if <embed-manifest>on in $(properties) && <embed-manifest-via>mt in $(properties)
     {
         if [ feature.get-values <embed-manifest-file> : $(properties) ]
@@ -819,6 +819,10 @@ rule link ( targets + : sources * : properties * )
 rule link.dll ( targets + : sources * : properties * )
 {
     set-setup-command $(targets) : $(properties) ;
+    PDB_NAME on $(<[1]) = $(<[1]:S=.pdb) ;
+    LOCATE on $(<[1]:S=.pdb) = [ on $(<[1]) return $(LOCATE) ] ;
+    PDB_NAME on $(>) = $(<[1]:S=.ipdb) ;
+    LOCATE on $(<[1]:S=.ipdb) = [ on $(<[1]) return $(LOCATE) ] ;
     DEPENDS $(<) : [ on $(<) return $(DEF_FILE) ] ;
     local import-lib ;
     if ! <suppress-import-lib>true in $(properties)
@@ -861,14 +865,18 @@ rule link.dll ( targets + : sources * : properties * )
 # and are useful in any PE target (both DLL and EXE).
 
 {
-    actions link bind DEF_FILE LIBRARIES_MENTIONED_BY_FILE MANIFEST_FILE
+    actions link bind DEF_FILE LIBRARIES_MENTIONED_BY_FILE MANIFEST_FILE PDB_NAME
     {
-        $(.SETUP) $(.LD) $(LINKFLAGS) /out:"$(<[1]:W)" /LIBPATH:"$(LINKPATH:W)" /MANIFESTINPUT:"$(MANIFEST_FILE)" $(OPTIONS) @"@($(<[1]:W).rsp:E=$(.nl)"$(>)" $(.nl)$(LIBRARIES_MENTIONED_BY_FILE) $(.nl)$(LIBRARIES) $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_ST).lib" $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_SA).lib")"
+        $(.SETUP) $(.LD) $(LINKFLAGS) /out:"$(<[1]:W)" /LIBPATH:"$(LINKPATH:W)" /MANIFESTINPUT:"$(MANIFEST_FILE)" $(OPTIONS) $(PDB_LINKFLAG)"$(PDB_NAME)" /PDBALTPATH:"$(PDB_NAME:B).pdb" @"@($(<[1]:W).rsp:E=$(.nl)"$(>)" $(.nl)$(LIBRARIES_MENTIONED_BY_FILE) $(.nl)$(LIBRARIES) $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_ST).lib" $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_SA).lib")"
+        if %ERRORLEVEL% NEQ 0 EXIT %ERRORLEVEL%
+        if exist "$(PDB_NAME:S=.ipdb)" $(.RM) "$(PDB_NAME:S=.ipdb)"
     }
 
     actions manifest
     {
-        $(.SETUP) $(.MT) -manifest "$(<[1]).manifest" "-outputresource:$(<[1]);1"
+        if exist "$(<[1]).manifest" (
+            $(.SETUP) $(.MT) -manifest "$(<[1]).manifest" "-outputresource:$(<[1]);1"
+        )
     }
 
     actions manifest.user bind EMBED_MANIFEST_FILE
@@ -876,16 +884,20 @@ rule link.dll ( targets + : sources * : properties * )
         $(.SETUP) $(.MT) -manifest "$(EMBED_MANIFEST_FILE)" "-outputresource:$(<[1]);1"
     }
 
-    actions link.dll bind IMPORT_LIB DEF_FILE LIBRARIES_MENTIONED_BY_FILE MANIFEST_FILE
+    actions link.dll bind IMPORT_LIB DEF_FILE LIBRARIES_MENTIONED_BY_FILE PDB_NAME
     {
-        $(.SETUP) $(.LD) /DLL $(LINKFLAGS) /out:"$(<[1]:W)" /IMPLIB:"$(IMPORT_LIB:W)" /LIBPATH:"$(LINKPATH:W)" /def:"$(DEF_FILE)" /MANIFESTINPUT:"$(MANIFEST_FILE)" $(OPTIONS) @"@($(<[1]:W).rsp:E=$(.nl)"$(>)" $(.nl)$(LIBRARIES_MENTIONED_BY_FILE) $(.nl)$(LIBRARIES) $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_ST).lib" $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_SA).lib")"
+        $(.SETUP) $(.LD) /DLL $(LINKFLAGS) /out:"$(<[1]:W)" /IMPLIB:"$(IMPORT_LIB:W)" /LIBPATH:"$(LINKPATH:W)" /def:"$(DEF_FILE)" /MANIFESTINPUT:"$(MANIFEST_FILE)" $(OPTIONS) $(PDB_LINKFLAG)"$(PDB_NAME)" /PDBALTPATH:"$(PDB_NAME:B).pdb" @"@($(<[1]:W).rsp:E=$(.nl)"$(>)" $(.nl)$(LIBRARIES_MENTIONED_BY_FILE) $(.nl)$(LIBRARIES) $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_ST).lib" $(.nl)"$(LIBRARY_OPTION)$(FINDLIBS_SA).lib")"
+        if %ERRORLEVEL% NEQ 0 EXIT %ERRORLEVEL%
+        if exist "$(PDB_NAME:S=.ipdb)" $(.RM) "$(PDB_NAME:S=.ipdb)"
+
     }
 
     actions manifest.dll
     {
-        $(.SETUP) $(.MT) -manifest "$(<[1]).manifest" "-outputresource:$(<[1]);2"
+        if exist "$(<[1]).manifest" (
+            $(.SETUP) $(.MT) -manifest "$(<[1]).manifest" "-outputresource:$(<[1]);2"
+        )
     }
-
     actions manifest.dll.user bind EMBED_MANIFEST_FILE
     {
         $(.SETUP) $(.MT) -manifest "$(EMBED_MANIFEST_FILE)" "-outputresource:$(<[1]);2"
@@ -1806,7 +1818,7 @@ local rule register-toolset-really ( )
     # Declare msvc toolset specific features.
     {
         feature.feature debug-store : object database : propagated ;
-        feature.feature pch-source  :                 : dependency free ;
+    #    feature.feature pch-source  :                 : dependency free ;
     }
 
     # Declare generators.
